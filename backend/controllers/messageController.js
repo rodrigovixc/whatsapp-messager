@@ -1,15 +1,34 @@
-// messageController.js
-const { create, Whatsapp } = require('@wppconnect-team/wppconnect');
+// backend/messageController.js
+const { create } = require('@wppconnect-team/wppconnect');
+const QRCode = require('qrcode');
 
 let client;
+let qrCodeData;
 
-async function initializeClient() {
+async function initializeClient(res) {
   if (!client) {
     client = await create({
       session: 'session-name',
       headless: true,
       logQR: true,
+      qrCallback: async (qrCode) => {
+        console.log('QR Code recebido:', qrCode);
+
+        // Converte o código do QR em uma imagem base64
+        qrCodeData = await QRCode.toDataURL(qrCode);
+
+        if (res) {
+            res.json({ qr: qrCodeData });
+        }
+    }
     });
+
+    client.on('ready', () => {
+      console.log('WhatsApp conectado!');
+    });
+  }
+  else if(qrCodeData && res){
+      res.json({ qr: qrCodeData });
   }
 }
 
@@ -21,18 +40,21 @@ async function sendMessage(req, res) {
   }
 
   try {
-    await initializeClient();
+    if (!client) {
+      return res.status(400).json({ error: 'O whatsapp ainda não foi conectado.' });
+    }
 
     for (const message of messages) {
       const { number, name, message: messageText } = message;
 
       if (!number || !messageText) {
         console.error('Mensagem inválida:', message);
-        continue; // Pula para a próxima mensagem se esta for inválida
+        continue;
       }
 
       const mensagemCompleta = name ? `Olá ${name}, ${messageText}` : messageText;
       await client.sendText(`${number}@c.us`, mensagemCompleta);
+      // adicionar chamada para o slack aqui
     }
 
     res.json({ success: true, message: 'Mensagens enviadas com sucesso.' });
@@ -43,5 +65,6 @@ async function sendMessage(req, res) {
 }
 
 module.exports = {
+  initializeClient,
   sendMessage,
 };
