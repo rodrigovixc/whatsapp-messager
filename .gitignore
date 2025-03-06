@@ -1,3 +1,4 @@
 node_modules/
 tokens/
 backend/.env
+.env
