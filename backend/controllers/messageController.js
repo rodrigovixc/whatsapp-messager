@@ -1,70 +1,52 @@
 // backend/messageController.js
 const { create } = require('@wppconnect-team/wppconnect');
-const QRCode = require('qrcode');
+const qrcode = require('qrcode-terminal');
 
 let client;
-let qrCodeData;
 
-async function initializeClient(res) {
-  if (!client) {
+// Inicializa o WhatsApp e exibe o QR Code no console
+async function initializeClient() {
     client = await create({
-      session: 'session-name',
-      headless: true,
-      logQR: true,
-      qrCallback: async (qrCode) => {
-        console.log('QR Code recebido:', qrCode);
-
-        // Converte o código do QR em uma imagem base64
-        qrCodeData = await QRCode.toDataURL(qrCode);
-
-        if (res) {
-            res.json({ qr: qrCodeData });
+        session: 'session-name',
+        headless: true,
+        logQR: false, 
+        qrCallback: (qrCode) => {
+            console.log('Escaneie o QR Code abaixo para conectar ao WhatsApp:');
+            qrcode.generate(qrCode, { small: true });
         }
-    }
     });
 
     client.on('ready', () => {
-      console.log('WhatsApp conectado!');
+        console.log('✅ WhatsApp conectado com sucesso!');
     });
-  }
-  else if(qrCodeData && res){
-      res.json({ qr: qrCodeData });
-  }
+
+    client.on('disconnected', () => {
+        console.log('❌ WhatsApp desconectado! Reiniciando sessão...');
+        initializeClient();
+    });
 }
 
+// Envio de mensagens via API
 async function sendMessage(req, res) {
-  const messages = req.body;
+    const { number, message } = req.body;
 
-  if (!Array.isArray(messages)) {
-    return res.status(400).json({ error: 'O corpo da requisição deve ser um array de mensagens.' });
-  }
-
-  try {
-    if (!client) {
-      return res.status(400).json({ error: 'O whatsapp ainda não foi conectado.' });
+    if (!number || !message) {
+        return res.status(400).json({ error: 'Número e mensagem são obrigatórios' });
     }
 
-    for (const message of messages) {
-      const { number, name, message: messageText } = message;
+    try {
+        if (!client) {
+            return res.status(500).json({ error: 'O WhatsApp ainda não foi conectado.' });
+        }
 
-      if (!number || !messageText) {
-        console.error('Mensagem inválida:', message);
-        continue;
-      }
+        const formattedNumber = number.includes('@c.us') ? number : `${number}@c.us`;
+        await client.sendText(formattedNumber, message);
 
-      const mensagemCompleta = name ? `Olá ${name}, ${messageText}` : messageText;
-      await client.sendText(`${number}@c.us`, mensagemCompleta);
-      // adicionar chamada para o slack aqui
+        res.status(200).json({ success: true, message: 'Mensagem enviada com sucesso' });
+    } catch (error) {
+        console.error('Erro ao enviar mensagem:', error);
+        res.status(500).json({ error: 'Erro ao enviar mensagem' });
     }
-
-    res.json({ success: true, message: 'Mensagens enviadas com sucesso.' });
-  } catch (error) {
-    console.error('Erro ao enviar mensagens:', error);
-    res.status(500).json({ error: 'Erro ao enviar mensagens.', details: error.message });
-  }
 }
 
-module.exports = {
-  initializeClient,
-  sendMessage,
-};
+module.exports = { initializeClient, sendMessage };

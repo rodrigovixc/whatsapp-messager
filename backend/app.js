@@ -1,40 +1,22 @@
-// backend/index.js
-const express = require('express');
+// backend/app.js
+// const express = require('express');
+const dotenv = require('dotenv');
 const messageController = require('./controllers/messageController');
 const authenticate = require('./authMiddleware');
-const cors = require('cors');
-const dotenv = require('dotenv');
-dotenv.config({ path: '/Users/rodrigo/whatsapp-notification-system/backend/.env' });
+
+dotenv.config();
 
 const app = express();
-
-const corsOptions = {
-    origin: '',
-    optionsSuccessStatus: 200,
-};
-
-app.use(cors());
 app.use(express.json());
 
-// Rota para obter o QRCode
-app.get('/qr', authenticate, (req, res) => {
-    messageController.initializeClient(res);
-});
-
-// Rota para enviar mensagens
+// Rota para envio de mensagem via API
 app.post('/send-message', authenticate, messageController.sendMessage);
 
-// Tratamento de erros para rotas não encontradas
-app.use((req, res, next) => {
-    res.status(404).json({ error: 'Rota não encontrada' });
-});
+// Inicializa o WhatsApp
+messageController.initializeClient();
 
-// Tratamento de erros geral
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-});
-
-app.listen(3000, () => {
-    console.log('Servidor rodando na porta 3000');
+// Inicia o servidor
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Servidor rodando na porta ${PORT}`);
 });
